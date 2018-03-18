@@ -10,7 +10,8 @@ from flask import Flask, Response
 from yad2k import ObjectDetector
 
 class InferenceWorker:
-    def __init__(self, model_path, anchors_path, classes_path, font_path, score_threshold=.3, iou_threshold=.5):
+    def __init__(self, model_path, anchors_path, classes_path, font_path,
+            score_threshold=.3, iou_threshold=.5):
         model_path = os.path.expanduser(model_path)
         assert model_path.endswith('.h5'), 'Keras model must be a .h5 file.'
 
@@ -25,7 +26,12 @@ class InferenceWorker:
 
         self.font_path = font_path
 
-    def process(self, image_filepath, output_filepath):
+    def process_camera(self, camera, output_filepath):
+        image_data = camera.read()
+        image = Image.fromarray(image_data)
+        return self._process(image, output_filepath)
+
+    def process_file(self, image_filepath, output_filepath):
         try:
             image_type = imghdr.what(image_filepath)
             if not image_type:
@@ -37,10 +43,13 @@ class InferenceWorker:
             return
             # TODO: improve here
 
-        objects = self.detector.detect(image_filepath)
-        print('Found {} objects for {}'.format(len(objects), image_filepath))
-
         image = Image.open(image_filepath)
+
+        return self._process(image, output_filepath)
+
+    def _process(self, image, output_filepath):
+        objects = self.detector.detect(image)
+        print('Found {} objects'.format(len(objects)))
 
         font = ImageFont.truetype(
             font=self.font_path,
@@ -96,7 +105,7 @@ class InferenceWorker:
 app = Flask(__name__)
 
 @app.route('/')
-def hello_pdb():
+def homepage():
     #message = '<html><head><script type="application/javascript">alert(1);console.write("000");document.addEventListener("DOMContentLoaded", function(event) { console.write("111"); setInterval(1000, function() { console.write("222"); document.getElementById("image").src = "/image?cache=" + Math.floor(Math.random() * 1000000) }) });</script></head><body><p>Hello friend!</p><p><img id="image" src="/image" /></p></body></html>'
     message = '''<html><head><script type="application/javascript">
     document.addEventListener("DOMContentLoaded",
@@ -110,7 +119,7 @@ def hello_pdb():
 
 @app.route('/image')
 def image():
-    worker.process(INPUT_PATH, OUTPUT_PATH)
+    worker.process_file(INPUT_PATH, OUTPUT_PATH)
     with open(OUTPUT_PATH, 'rb') as f:
         bytes = f.read()
     return Response(bytes, mimetype='image/jpeg')

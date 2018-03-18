@@ -4,14 +4,17 @@ import os
 import random
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
+from io import BytesIO
 
 from flask import Flask, Response
 
 from yad2k import ObjectDetector
 
+from camera import UsbCamera
+
 class InferenceWorker:
     def __init__(self, model_path, anchors_path, classes_path, font_path,
-            score_threshold=.3, iou_threshold=.5):
+            score_threshold=.3, iou_threshold=.5, use_camera=False):
         model_path = os.path.expanduser(model_path)
         assert model_path.endswith('.h5'), 'Keras model must be a .h5 file.'
 
@@ -26,12 +29,22 @@ class InferenceWorker:
 
         self.font_path = font_path
 
-    def process_camera(self, camera, output_filepath):
-        image_data = camera.read()
-        image = Image.fromarray(image_data)
-        return self._process(image, output_filepath)
+        if use_camera:
+            self._camera = UsbCamera()
+            self._camera.start()
+        else:
+            self._camera = None
 
-    def process_file(self, image_filepath, output_filepath):
+    def process_camera(self):
+        if self._camera is None:
+            raise Exception("The server is not configured for camera input")
+        image_data = self._camera.read()
+        if image_data is None:
+            return None
+        image = Image.fromarray(image_data)
+        return self._process(image)
+
+    def process_file(self, image_filepath):
         try:
             image_type = imghdr.what(image_filepath)
             if not image_type:
@@ -45,9 +58,9 @@ class InferenceWorker:
 
         image = Image.open(image_filepath)
 
-        return self._process(image, output_filepath)
+        return self._process(image)
 
-    def _process(self, image, output_filepath):
+    def _process(self, image):
         objects = self.detector.detect(image)
         print('Found {} objects'.format(len(objects)))
 
@@ -83,10 +96,15 @@ class InferenceWorker:
             draw.text(text_origin, label, fill=(0, 0, 0), font=font)
             del draw
 
-        image.save(output_filepath, quality=90)
+        with BytesIO() as output:
+            image.save(output, 'jpeg', quality=90)
+            return output.getvalue()
 
     def close(self):
         self.detector.close()
+        if self._camera is not None:
+            self._camera.stop()
+            self._camera.close()
 
     def _generate_colors(self, class_names):
         hsv_tuples = [(x / len(class_names), 1., 1.)
@@ -119,9 +137,12 @@ def homepage():
 
 @app.route('/image')
 def image():
-    worker.process_file(INPUT_PATH, OUTPUT_PATH)
-    with open(OUTPUT_PATH, 'rb') as f:
-        bytes = f.read()
+    bytes = worker.process_file(INPUT_PATH)
+    return Response(bytes, mimetype='image/jpeg')
+
+@app.route('/camera')
+def camera():
+    bytes = worker.process_camera()
     return Response(bytes, mimetype='image/jpeg')
 
 if __name__ == "__main__":
@@ -129,9 +150,8 @@ if __name__ == "__main__":
     ANCHORS_PATH = '../model_data/yolo_anchors.txt'
     CLASSES_PATH = '../model_data/udacity_object_dataset_classes.txt'
     INPUT_PATH = '../temp/images/in.jpg'
-    OUTPUT_PATH = '../temp/images/out.jpg'
     FONT_PATH = '../resources/font/FiraMono-Medium.otf'
 
-    worker = InferenceWorker(MODEL_PATH, ANCHORS_PATH, CLASSES_PATH, FONT_PATH)
+    worker = InferenceWorker(MODEL_PATH, ANCHORS_PATH, CLASSES_PATH, FONT_PATH, use_camera=True)
 
     app.run(host='0.0.0.0', port=5000)

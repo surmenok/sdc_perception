@@ -28,6 +28,8 @@ class Camera:
 
     def read(self):
         with self._lock:
+            if self.frame is None:
+                return None
             return np.roll(self.frame, 1, axis=-1)
 
     def stop(self):

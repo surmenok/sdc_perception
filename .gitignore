@@ -99,3 +99,13 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+
+# data
+/data
+
+# temp
+/temp
+
+# models
+/model_data/udacity_object_model.h5

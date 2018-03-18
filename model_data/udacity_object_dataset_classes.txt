@@ -1,0 +1,5 @@
+biker
+trafficLight
+pedestrian
+truck
+car

@@ -7,10 +7,10 @@ import numpy as np
 
 from flask import Flask, Response
 
-from yad2k.yad2k import ObjectDetector
+from yad2k import ObjectDetector
 
 class InferenceWorker:
-    def __init__(self, model_path, anchors_path, classes_path, score_threshold=.3, iou_threshold=.5):
+    def __init__(self, model_path, anchors_path, classes_path, font_path, score_threshold=.3, iou_threshold=.5):
         model_path = os.path.expanduser(model_path)
         assert model_path.endswith('.h5'), 'Keras model must be a .h5 file.'
 
@@ -22,6 +22,8 @@ class InferenceWorker:
 
         # Generate colors for drawing bounding boxes.
         self.colors = self._generate_colors(self.detector.class_names)
+
+        self.font_path = font_path
 
     def process(self, image_filepath, output_filepath):
         try:
@@ -41,7 +43,7 @@ class InferenceWorker:
         image = Image.open(image_filepath)
 
         font = ImageFont.truetype(
-            font='yad2k/font/FiraMono-Medium.otf',
+            font=self.font_path,
             size=np.floor(3e-2 * image.size[1] + 0.5).astype('int32'))
         thickness = (image.size[0] + image.size[1]) // 300
 
@@ -114,12 +116,13 @@ def image():
     return Response(bytes, mimetype='image/jpeg')
 
 if __name__ == "__main__":
-    MODEL_PATH = 'yad2k/trained_model.h5'
-    ANCHORS_PATH = 'yad2k/model_data/yolo_anchors.txt'
-    CLASSES_PATH = '../data/udacity-object-dataset/classes.txt'
-    INPUT_PATH = 'yad2k/images/1478019976185898081.jpg'
-    OUTPUT_PATH = 'yad2k/images/out/test.jpg'
+    MODEL_PATH = '../model_data/udacity_object_model.h5'
+    ANCHORS_PATH = '../model_data/yolo_anchors.txt'
+    CLASSES_PATH = '../model_data/udacity_object_dataset_classes.txt'
+    INPUT_PATH = '../temp/images/in.jpg'
+    OUTPUT_PATH = '../temp/images/out.jpg'
+    FONT_PATH = '../resources/font/FiraMono-Medium.otf'
 
-    worker = InferenceWorker(MODEL_PATH, ANCHORS_PATH, CLASSES_PATH)
+    worker = InferenceWorker(MODEL_PATH, ANCHORS_PATH, CLASSES_PATH, FONT_PATH)
 
     app.run(host='0.0.0.0', port=5000)
